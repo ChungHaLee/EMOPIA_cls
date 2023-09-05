@@ -1,11 +1,15 @@
 import os
-import json
+import subprocess
 import pickle
 from pathlib import Path
 from argparse import ArgumentParser, Namespace
 
 import torch
 import torchaudio
+
+
+from pydub import AudioSegment
+from pydub.playback import play
 from omegaconf import DictConfig, OmegaConf
 from audio_cls.src.model.net import ShortChunkCNN_Res
 from midi_cls.src.model.net import SAN
@@ -17,14 +21,34 @@ path_dictionary = os.path.join(path_data_root, 'dictionary.pkl')
 midi_dictionary = pickle.load(open(path_dictionary, "rb"))
 event_to_int = midi_dictionary[0]
 
+# def torch_sox_effect_load(mp3_path, resample_rate):
+#     effects = [
+#         ['rate', str(resample_rate)]
+#     ]
+#     waveform, source_sr = torchaudio.load(mp3_path)
+#     if source_sr != 22050:
+#         waveform, _ = torchaudio.sox_effects.apply_effects_tensor(waveform, source_sr, effects, channels_first=True)
+#     return waveform
+
+
 def torch_sox_effect_load(mp3_path, resample_rate):
-    effects = [
-        ['rate', str(resample_rate)]
-    ]
-    waveform, source_sr = torchaudio.load(mp3_path)
-    if source_sr != 22050:
-        waveform, _ = torchaudio.sox_effects.apply_effects_tensor(waveform, source_sr, effects, channels_first=True)
+    mp3_audio = AudioSegment.from_mp3(mp3_path)
+
+    # Resample to the desired rate
+    mp3_audio = mp3_audio.set_frame_rate(resample_rate)
+
+    # Export as WAV (temporary file)
+    temp_wav_path = "temp_audio.wav"
+    mp3_audio.export(temp_wav_path, format="wav")
+
+    # Load the processed audio using torchaudio
+    waveform, _ = torchaudio.load(temp_wav_path)
+
+    # Remove the temporary WAV file
+    os.remove(temp_wav_path)
+
     return waveform
+
 
 def remi_extractor(midi_path, event_to_int):
     midi_obj = analyzer(midi_path)
@@ -118,4 +142,5 @@ if __name__ == "__main__":
     parser.add_argument("--file_path", default="./dataset/sample_data/Sakamoto_MerryChristmasMr_Lawrence.mid", type=str)
     parser.add_argument('--cuda', default='cuda:0', type=str)
     args = parser.parse_args()
+
     _, _ = predict(args)
